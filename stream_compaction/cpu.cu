@@ -2,6 +2,7 @@
 #include "cpu.h"
 
 #include "common.h"
+#include <memory>
 
 namespace StreamCompaction {
     namespace CPU {
@@ -19,7 +20,12 @@ namespace StreamCompaction {
          */
         void scan(int n, int *odata, const int *idata) {
 	        timer().startCpuTimer();
-            // TODO
+          odata[0] = 0;
+          for (int idx = 1; idx < n; ++idx)
+          {
+            odata[idx] = odata[idx - 1] + idata[idx - 1];
+          }
+
 	        timer().endCpuTimer();
         }
 
@@ -30,9 +36,20 @@ namespace StreamCompaction {
          */
         int compactWithoutScan(int n, int *odata, const int *idata) {
 	        timer().startCpuTimer();
-            // TODO
+
+          int outIdx = 0;
+          for (int idx = 0; idx < n; ++idx)
+          {
+            const int inputData = idata[idx];
+            if (inputData != 0)
+            {
+              odata[outIdx] = inputData;
+              ++outIdx;
+            }
+          }
+
 	        timer().endCpuTimer();
-            return -1;
+          return outIdx;
         }
 
         /**
@@ -41,10 +58,36 @@ namespace StreamCompaction {
          * @returns the number of elements remaining after compaction.
          */
         int compactWithScan(int n, int *odata, const int *idata) {
+          const std::unique_ptr<int[]> conditionArray = std::make_unique<int[]>(n);
+          const std::unique_ptr<int[]> scanArray = std::make_unique<int[]>(n);
+
 	        timer().startCpuTimer();
-	        // TODO
+
+          for (int idx = 0; idx < n; ++idx)
+          {
+            conditionArray[idx] = idata[idx] != 0 ? 1 : 0;
+          }
+
+          scanArray[0] = 0;
+          for (int idx = 1; idx < n; ++idx)
+          {
+            scanArray[idx] = scanArray[idx - 1] + conditionArray[idx - 1];
+          }
+
+          int outIdx = 0;
+          for (int idx = 0; idx < n; ++idx)
+          {
+            const int inputData = idata[idx];
+            if (conditionArray[idx] == 1)
+            {
+              outIdx = scanArray[idx];
+              odata[outIdx] = inputData;
+            }
+          }
+
 	        timer().endCpuTimer();
-            return -1;
+
+          return outIdx + 1;
         }
     }
 }
