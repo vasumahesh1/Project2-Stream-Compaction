@@ -59,17 +59,18 @@ namespace StreamCompaction
       int* loopInputBuffer = device_idata;
       int* loopOutputBuffer = device_odata;
 
-      timer().startGpuTimer();
+      
       for (int d = 1; d <= logN; ++d)
       {
         const int powD = std::pow(2, d - 1);
+        timer().startGpuTimer();
         kernel_NaiveParallelScan<<<fullBlocksPerGrid, blockSize>>>(numObjects - 1, powD, loopOutputBuffer, loopInputBuffer);
+        timer().endGpuTimer();
 
         int* temp = loopInputBuffer;
         loopInputBuffer = loopOutputBuffer;
         loopOutputBuffer = temp;
       }
-      timer().endGpuTimer();
 
       cudaMemcpy((odata + 1), loopInputBuffer, sizeof(int) * (numObjects - 1), cudaMemcpyDeviceToHost);
 
