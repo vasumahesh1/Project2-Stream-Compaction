@@ -189,6 +189,16 @@ namespace StreamCompaction
       int scannedLast = 0;
       cudaMemcpy(&scannedLast, &device_scannedBools[nearestPower2 - 1], sizeof(int), cudaMemcpyDeviceToHost);
 
+      // Eg:
+      // 0101 is our bools
+      // Scanned: 0 0 1 1 (Exclusive)
+      //
+      // 01010 is our bools
+      // Scanned: 0 0 1 1 2
+      //
+      // So we add bools[last] + Scanned[last] to get final count.
+      // In 1st case: 1 + 1 = 2 entries (final compaction count)
+      // In 2nd case: 2 + 0 = 2 entries (final compaction count)
       const int totalEntries = scannedLast + boolArrayLast;
       cudaMemcpy(odata, device_odata, sizeof(int) * (totalEntries), cudaMemcpyDeviceToHost);
 
