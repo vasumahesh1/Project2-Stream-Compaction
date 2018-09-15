@@ -3,6 +3,7 @@
 #include "common.h"
 #include "efficient.h"
 #include "naive.h"
+#include<cstdint>
 
 #define blockSize 256
 
@@ -78,7 +79,8 @@ namespace StreamCompaction
       cudaMalloc((void**)&device_idata, nearestPower2 * sizeof(int));
       checkCUDAError("cudaMalloc device_idata failed!");
 
-      cudaMemcpy(device_idata, idata, sizeof(int) * nearestPower2, cudaMemcpyHostToDevice);
+      cudaMemcpy(device_idata, idata, sizeof(int) * numObjects, cudaMemcpyHostToDevice);
+      checkCUDAError("cudaMemcpy failed!");
 
       const int numBlocks = (numObjects + blockSize - 1) / blockSize;
       dim3 fullBlocksPerGrid(numBlocks);
@@ -141,7 +143,7 @@ namespace StreamCompaction
       cudaMalloc((void**)&device_scannedBools, nearestPower2 * sizeof(int));
       checkCUDAError("cudaMalloc device_scannedBools failed!");
 
-      cudaMemcpy(device_idata, idata, sizeof(int) * nearestPower2, cudaMemcpyHostToDevice);
+      cudaMemcpy(device_idata, idata, sizeof(int) * numObjects, cudaMemcpyHostToDevice);
 
       const int numBlocks = (numObjects + blockSize - 1) / blockSize;
       dim3 fullBlocksPerGrid(numBlocks);
@@ -181,7 +183,9 @@ namespace StreamCompaction
       timer().endGpuTimer();
 
       // 3. Store in OData
+      timer().startGpuTimer();
       Common::kernScatter<<<fullBlocksPerGrid, blockSize>>>(numObjects, device_odata, device_idata, device_bools, device_scannedBools);
+      timer().endGpuTimer();
 
       int boolArrayLast = 0;
       cudaMemcpy(&boolArrayLast, &device_bools[nearestPower2 - 1], sizeof(int), cudaMemcpyDeviceToHost);

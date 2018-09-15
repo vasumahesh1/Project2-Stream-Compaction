@@ -107,7 +107,7 @@ namespace StreamCompaction
         accumulated_gpu_time_milliseconds += prev_elapsed_time_gpu_milliseconds;
       }
 
-      float getCpuElapsedTimeForPreviousOperation() //noexcept //(damn I need VS 2015
+      float getCpuElapsedTimeForPreviousOperation() //noexcept
       {
         const float returnTime = accumulated_cpu_time_milliseconds;
         accumulated_cpu_time_milliseconds = 0;

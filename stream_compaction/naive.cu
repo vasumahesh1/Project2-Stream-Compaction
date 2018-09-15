@@ -52,25 +52,25 @@ namespace StreamCompaction
 
       cudaMemcpy(device_idata, idata, sizeof(int) * numObjects, cudaMemcpyHostToDevice);
 
-      dim3 fullBlocksPerGrid((numObjects + blockSize - 1) / blockSize);
+      const int numBlocks = (numObjects + blockSize - 1) / blockSize;
+      dim3 fullBlocksPerGrid(numBlocks);
 
       const int logN = ilog2ceil(numObjects);
 
       int* loopInputBuffer = device_idata;
       int* loopOutputBuffer = device_odata;
 
-      
+      timer().startGpuTimer();
       for (int d = 1; d <= logN; ++d)
       {
         const int powD = std::pow(2, d - 1);
-        timer().startGpuTimer();
         kernel_NaiveParallelScan<<<fullBlocksPerGrid, blockSize>>>(numObjects - 1, powD, loopOutputBuffer, loopInputBuffer);
-        timer().endGpuTimer();
 
         int* temp = loopInputBuffer;
         loopInputBuffer = loopOutputBuffer;
         loopOutputBuffer = temp;
       }
+      timer().endGpuTimer();
 
       cudaMemcpy((odata + 1), loopInputBuffer, sizeof(int) * (numObjects - 1), cudaMemcpyDeviceToHost);
 
