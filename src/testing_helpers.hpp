@@ -50,7 +50,8 @@ void onesArray(int n, int *a) {
 }
 
 void genArray(int n, int *a, int maxval) {
-    srand(time(nullptr));
+    // srand(time(nullptr));
+    srand(1231412);
 
     for (int i = 0; i < n; i++) {
         a[i] = rand() % maxval;
