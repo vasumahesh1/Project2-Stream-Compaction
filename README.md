@@ -38,7 +38,6 @@ If we just implement the barebones scan algorithm it turns out that they are qui
 
 | Elements in Array  | CPU Scan (Power of 2) | CPU Scan (Non Power of 2) | Naive Scan (Power of 2) | Naive Scan (Non Power of 2) | Work Efficient Scan (Power of 2) | Work Efficient Scan (Non Power of 2) | Thrust Scan (Power of 2) | Thrust Scan (Non Power of 2) |
 | ----------- |------------------------------------|-------------------------------------- |-----------------|-----------------|-----------------|-----------------|-----------------|-----------------|
-
 | 2^8  | 0.000485 | 0.000485 | 0.027648 | 0.02672  | 0.062464 | 0.053248 | 0.012288 | 0.012288 |
 | 2^9  | 0.00097  | 0.001455 | 0.07168  | 0.068608 | 0.16384  | 0.159744 | 0.037888 | 0.065536 |
 | 2^10 | 0.001454 | 0.001455 | 0.121856 | 0.120832 | 0.262144 | 0.260096 | 0.066592 | 0.065536 |
