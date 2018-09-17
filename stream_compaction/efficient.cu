@@ -5,7 +5,7 @@
 #include "naive.h"
 #include<cstdint>
 
-#define blockSize 256
+#define blockSize 4
 
 namespace StreamCompaction
 {
@@ -78,6 +78,43 @@ namespace StreamCompaction
         }
       
         offset *= 2;
+      }
+
+      __syncthreads();
+
+      idata[staticIdx] = temp[threadID2X];
+      idata[staticIdx + powD] = temp[threadID2X + 1];
+    }
+
+    __global__ void kernel_DownSweepOptimized_v1(int N, int numThreads, int powD, int* idata, int* odata)
+    {
+      extern __shared__ int temp[];
+
+      const int threadID = threadIdx.x;
+      const int threadID2X = 2 * threadIdx.x;
+      const int staticIdx = threadID2X + (blockIdx.x * N) + (powD - 1);
+
+      int offset = N / 2;
+
+      temp[threadID2X] = idata[staticIdx];
+      temp[threadID2X + 1] = idata[staticIdx + powD];
+
+      // traverse down tree & build scan
+      for (int d = 1; d <= numThreads; d *= 2)
+      {
+        offset >>= 1;
+      
+        __syncthreads();
+      
+        if (threadID < d)
+        {
+          const int ai = (threadID2X + 1) - 1;
+          const int bi = (threadID2X + 2) - 1;
+      
+          const int t = temp[ai];
+          temp[ai] = temp[bi];
+          temp[bi] += t;
+        }
       }
 
       __syncthreads();
@@ -169,6 +206,9 @@ namespace StreamCompaction
 
       cudaMalloc((void**)&device_idata, nearestPower2 * sizeof(int));
       checkCUDAError("cudaMalloc device_idata failed!");
+      
+      cudaMalloc((void**)&device_odata, nearestPower2 * sizeof(int));
+      checkCUDAError("cudaMalloc device_idata failed!");
 
       cudaMemcpy(device_idata, idata, sizeof(int) * numObjects, cudaMemcpyHostToDevice);
       checkCUDAError("cudaMemcpy failed!");
@@ -181,6 +221,7 @@ namespace StreamCompaction
       const int numCount = nearestPower2;
 
       int upSweepBlockCount = (numCount + blockSize - 1) / blockSize;
+      const int downSweepBlockCount = (numCount + blockSize - 1) / blockSize;
 
       int depth = 0;
 
@@ -209,17 +250,32 @@ namespace StreamCompaction
       // Might need to find a more efficient way.
       const int lastValue = 0;
       cudaMemcpy(&loopInputBuffer[nearestPower2 - 1], &lastValue, sizeof(int), cudaMemcpyHostToDevice);
-      
+
+      depth = logN - 1;
+      int currentDownSweepBlockCount = 1;
       // Down Sweep
       timer().startGpuTimer();
-      for (int d = logN - 1; d >= 0; --d)
+      while(currentDownSweepBlockCount <= downSweepBlockCount)
       {
-        const int powDP1 = std::pow(2, d + 1);
-        kernel_DownSweep<<<fullBlocksPerGrid, blockSize>>>(numObjects, powDP1, loopInputBuffer);
+        int powD = std::pow(2, depth);
+        dim3 downSweepBlocks(currentDownSweepBlockCount);
+
+        const int numObjectsPerBlock = numObjects / currentDownSweepBlockCount;
+        int threadsPerBlock = 1;
+
+        if (currentDownSweepBlockCount == downSweepBlockCount)
+        {
+          threadsPerBlock = blockSize / 2;
+          powD = 1;
+        }
+
+        kernel_DownSweepOptimized_v1<<<downSweepBlocks, threadsPerBlock, 2 * threadsPerBlock * sizeof(int)>>>(numObjectsPerBlock, threadsPerBlock, powD, loopInputBuffer, device_odata);
+        currentDownSweepBlockCount *= 2;
+        depth--;
       }
       timer().endGpuTimer();
 
-      cudaMemcpy(odata, loopInputBuffer, sizeof(int) * (numObjects), cudaMemcpyDeviceToHost);
+      cudaMemcpy(odata, device_odata, sizeof(int) * (numObjects), cudaMemcpyDeviceToHost);
 
       cudaFree(device_idata);
     }
