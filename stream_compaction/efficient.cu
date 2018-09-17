@@ -17,6 +17,18 @@ namespace StreamCompaction
     int* device_odata;
     int numObjects;
 
+    void printArray(int n, int *a, bool abridged = false) {
+      printf("    [ ");
+      for (int i = 0; i < n; i++) {
+        if (abridged && i + 2 == 15 && n > 16) {
+          i = n - 2;
+          printf("... ");
+        }
+        printf("%3d ", a[i]);
+      }
+      printf("]\n");
+    }
+
     using StreamCompaction::Common::PerformanceTimer;
 
     PerformanceTimer& timer()
@@ -39,6 +51,39 @@ namespace StreamCompaction
 
       // x[k + 2d+1 – 1] += x[k + 2d – 1];
       idata[index + powDP1 - 1] += idata[index + (powDP1 / 2) - 1];
+    }
+
+    __global__ void kernel_UpSweepOptimized_v1(int N, int numThreads, int powD, int* idata)
+    {
+      extern __shared__ int temp[];
+
+      const int threadID = threadIdx.x;
+      const int threadID2X = 2 * threadIdx.x;
+      const int staticIdx = threadID2X + (blockIdx.x * N) + (powD - 1);
+
+      int offset = 1;
+
+      temp[threadID2X] = idata[staticIdx];
+      temp[threadID2X + 1] = idata[staticIdx + powD];
+
+      // build sum in place up the tree
+      for (int d = numThreads; d > 0; d >>= 1)
+      {
+        __syncthreads();
+        if (threadID < d)
+        {
+          const int ai = offset * (threadID2X + 1) - 1;
+          const int bi = offset * (threadID2X + 2) - 1;
+          temp[bi] += temp[ai];
+        }
+      
+        offset *= 2;
+      }
+
+      __syncthreads();
+
+      idata[staticIdx] = temp[threadID2X];
+      idata[staticIdx + powD] = temp[threadID2X + 1];
     }
 
     __global__ void kernel_DownSweep(int N, int powDP1, int* idata)
@@ -101,7 +146,70 @@ namespace StreamCompaction
       // Might need to find a more efficient way.
       const int lastValue = 0;
       cudaMemcpy(&loopInputBuffer[nearestPower2 - 1], &lastValue, sizeof(int), cudaMemcpyHostToDevice);
+      
+      // Down Sweep
+      timer().startGpuTimer();
+      for (int d = logN - 1; d >= 0; --d)
+      {
+        const int powDP1 = std::pow(2, d + 1);
+        kernel_DownSweep<<<fullBlocksPerGrid, blockSize>>>(numObjects, powDP1, loopInputBuffer);
+      }
+      timer().endGpuTimer();
 
+      cudaMemcpy(odata, loopInputBuffer, sizeof(int) * (numObjects), cudaMemcpyDeviceToHost);
+
+      cudaFree(device_idata);
+    }
+
+    void scanOptimized_v1(int n, int* odata, const int* idata)
+    {
+      numObjects = n;
+      const int logN = ilog2ceil(numObjects);
+      const int nearestPower2 = std::pow(2, logN);
+
+      cudaMalloc((void**)&device_idata, nearestPower2 * sizeof(int));
+      checkCUDAError("cudaMalloc device_idata failed!");
+
+      cudaMemcpy(device_idata, idata, sizeof(int) * numObjects, cudaMemcpyHostToDevice);
+      checkCUDAError("cudaMemcpy failed!");
+
+      const int numBlocks = (numObjects + blockSize - 1) / blockSize;
+      dim3 fullBlocksPerGrid(numBlocks);
+
+      int* loopInputBuffer = device_idata;
+
+      const int numCount = nearestPower2;
+
+      int upSweepBlockCount = (numCount + blockSize - 1) / blockSize;
+
+      int depth = 0;
+
+      // Up Sweep
+      timer().startGpuTimer();
+      while(upSweepBlockCount > 0)
+      {
+        const int powD = std::pow(2, depth);
+        const int powD1 = std::pow(2, depth + 1);
+
+        dim3 upSweepBlocks(upSweepBlockCount);
+
+        const int numObjectsPerBlock = numCount / upSweepBlockCount;
+
+        const int threadsPerBlock = numObjectsPerBlock / powD1;
+
+        kernel_UpSweepOptimized_v1<<<upSweepBlocks, threadsPerBlock, 2 * threadsPerBlock * sizeof(int)>>>(numObjectsPerBlock, threadsPerBlock, powD, loopInputBuffer);
+
+        upSweepBlockCount /= 2;
+        depth = ilog2ceil(numObjectsPerBlock);
+      }
+      timer().endGpuTimer();
+
+      // Set x[n-1] = 0
+      // This seems really weird that we need to copy a 0 from host to the device.
+      // Might need to find a more efficient way.
+      const int lastValue = 0;
+      cudaMemcpy(&loopInputBuffer[nearestPower2 - 1], &lastValue, sizeof(int), cudaMemcpyHostToDevice);
+      
       // Down Sweep
       timer().startGpuTimer();
       for (int d = logN - 1; d >= 0; --d)
