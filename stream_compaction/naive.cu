@@ -4,7 +4,7 @@
 #include "naive.h"
 #include <valarray>
 
-#define blockSize 256
+#define blockSize 512
 
 namespace StreamCompaction
 {

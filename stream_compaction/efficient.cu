@@ -5,7 +5,7 @@
 #include "naive.h"
 #include<cstdint>
 
-#define blockSize 4
+#define blockSize 512
 
 namespace StreamCompaction
 {
@@ -251,27 +251,12 @@ namespace StreamCompaction
       const int lastValue = 0;
       cudaMemcpy(&loopInputBuffer[nearestPower2 - 1], &lastValue, sizeof(int), cudaMemcpyHostToDevice);
 
-      depth = logN - 1;
-      int currentDownSweepBlockCount = 1;
       // Down Sweep
       timer().startGpuTimer();
-      while(currentDownSweepBlockCount <= downSweepBlockCount)
+      for (int d = logN - 1; d >= 0; --d)
       {
-        int powD = std::pow(2, depth);
-        dim3 downSweepBlocks(currentDownSweepBlockCount);
-
-        const int numObjectsPerBlock = numObjects / currentDownSweepBlockCount;
-        int threadsPerBlock = 1;
-
-        if (currentDownSweepBlockCount == downSweepBlockCount)
-        {
-          threadsPerBlock = blockSize / 2;
-          powD = 1;
-        }
-
-        kernel_DownSweepOptimized_v1<<<downSweepBlocks, threadsPerBlock, 2 * threadsPerBlock * sizeof(int)>>>(numObjectsPerBlock, threadsPerBlock, powD, loopInputBuffer, device_odata);
-        currentDownSweepBlockCount *= 2;
-        depth--;
+        const int powDP1 = std::pow(2, d + 1);
+        kernel_DownSweep<<<fullBlocksPerGrid, blockSize>>>(numObjects, powDP1, loopInputBuffer);
       }
       timer().endGpuTimer();
 
@@ -315,15 +300,12 @@ namespace StreamCompaction
       // 1. Get Bool Array 1st
       timer().startGpuTimer();
       Common::kernMapToBoolean<<<fullBlocksPerGrid, blockSize>>>(numObjects, device_bools, device_idata);
-      timer().endGpuTimer();
-
       cudaMemcpy(device_scannedBools, device_bools, sizeof(int) * nearestPower2, cudaMemcpyDeviceToDevice);
 
       // 2. Scan the Bool Array
       int* loopInputBuffer = device_scannedBools;
 
       // Up Sweep
-      timer().startGpuTimer();
       for (int d = 0; d < logN; ++d)
       {
         const int powDP1 = std::pow(2, d + 1);
@@ -344,10 +326,8 @@ namespace StreamCompaction
         const int powDP1 = std::pow(2, d + 1);
         kernel_DownSweep<<<fullBlocksPerGrid, blockSize>>>(numObjects, powDP1, loopInputBuffer);
       }
-      timer().endGpuTimer();
 
       // 3. Store in OData
-      timer().startGpuTimer();
       Common::kernScatter<<<fullBlocksPerGrid, blockSize>>>(numObjects, device_odata, device_idata, device_bools, device_scannedBools);
       timer().endGpuTimer();
 
