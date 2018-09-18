@@ -52,7 +52,13 @@ If we just implement the barebones scan algorithm it turns out that they are qui
 | 2^19 | 2.2177   | 0.796606 | 2.67267  | 2.64694  | 7.54173  | 7.57734  | 0.754688 | 0.709632 |
 | 2^20 | 5.36679  | 1.74352  | 3.00848  | 2.95424  | 15.3444  | 15.3364  | 1.1745   | 1.1223   |
 
+There seems to be such a discrepency in my Work Efficient one because I believe it is highly inefficient (shared memory difference below). The Work efficient one performed poorly for me even against my CPU. This could be because the threads aren't grouped and the waste the SM's utilization. After the class, I realized that the implemented code could be way faster as I was launching N threads for N numbers (in total). This was later resolved to N/2. The values however you see are for the "naive" version of the work efficient algorithm.
 
+### Scan with Shared Memory
+
+I implemented a partial implementation of the Work Efficient Scan (Only UpSweep). I got a significant boost because I ended up launching only the required amount of threads for the entries in the array. However, this implementation was a little different and I believe less efficient than the one shown in class. This is because the threads are not clumped together. Grouping of threads is much better because it helps in early warp termination.
+
+![](img/shared.PNG)
 
 ### Compaction Performance
 
@@ -60,7 +66,57 @@ I suffered similar performance issues with work efficient scans in the compact a
 
 ![](img/compactPO2.PNG)
 
-![](img/compactNPO2.PNG)
+![](img/compactNPO2.PNG)****************
+** SCAN TESTS **
+****************
+    [  16  29  39  25  25  14  11  20   0  34  28  11  33 ...   4   0 ]
+==== cpu scan, power-of-two ====
+   elapsed time: 7.32024ms    (std::chrono Measured)
+==== cpu scan, non-power-of-two ====
+   elapsed time: 2.39758ms    (std::chrono Measured)
+    passed
+==== naive scan, power-of-two ====
+   elapsed time: 1.45482ms    (CUDA Measured)
+    passed
+==== naive scan, non-power-of-two ====
+   elapsed time: 1.45306ms    (CUDA Measured)
+    passed
+==== work-efficient scan, power-of-two ====
+   elapsed time: 1.80938ms    (CUDA Measured)
+    passed
+==== work-efficient scan, non-power-of-two ====
+   elapsed time: 1.8143ms    (CUDA Measured)
+    passed
+==== thrust scan, power-of-two ====
+   elapsed time: 4.02115ms    (CUDA Measured)
+    passed
+==== thrust scan, power-of-two ====
+   elapsed time: 0.503808ms    (CUDA Measured)
+    passed
+==== thrust scan, non-power-of-two ====
+   elapsed time: 0.471008ms    (CUDA Measured)
+    passed
+
+*****************************
+** STREAM COMPACTION TESTS **
+*****************************
+    [   0   1   3   3   3   0   1   2   0   0   0   1   1 ...   2   0 ]
+==== cpu compact without scan, power-of-two ====
+   elapsed time: 4.38158ms    (std::chrono Measured)
+    passed
+==== cpu compact without scan, non-power-of-two ====
+   elapsed time: 3.77454ms    (std::chrono Measured)
+    passed
+==== cpu compact with scan ====
+   elapsed time: 12.5959ms    (std::chrono Measured)
+    passed
+==== work-efficient compact, power-of-two ====
+   elapsed time: 2.10064ms    (CUDA Measured)
+    passed
+==== work-efficient compact, non-power-of-two ====
+   elapsed time: 2.10413ms    (CUDA Measured)
+    passed
+Press any key to continue . . .
 
 | Elements in Array  | CPU Compact without scan (Power of 2) | CPU Compact without scan (Non Power of 2) | CPU Compact with Scan | Work Efficient Compact (Power of 2) | Work Efficient Compact (Non Power of 2) |
 | ----------- | ----------- | ----------- | ----------- | ----------- | ----------- |
@@ -77,3 +133,10 @@ I suffered similar performance issues with work efficient scans in the compact a
 | 2^18 | 1.06182  | 0.744727 | 1.53648  | 4.00554  | 4.0591   |
 | 2^19 | 1.488    | 1.48994  | 2.63418  | 7.96368  | 7.97901  |
 | 2^20 | 2.69624  | 2.80679  | 4.72727  | 16.1515  | 16.1321  |
+
+
+### Output Log
+
+```
+
+```
